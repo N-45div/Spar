@@ -39,3 +39,13 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# local secrets
+.dev.vars
+worker/.dev.vars
+.env
+.env.*
+
+# wrangler local state
+.wrangler/
+worker/.wrangler/
