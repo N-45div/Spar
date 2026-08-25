@@ -76,7 +76,13 @@ async function sarvamChat(env: Env, messages: { role: string; content: string }[
       'Content-Type': 'application/json',
       'api-subscription-key': env.SARVAM_API_KEY,
     },
-    body: JSON.stringify({ model, messages, temperature, max_tokens: 1200 }),
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature,
+      max_tokens: 1200,
+      response_format: { type: 'json_object' },
+    }),
   });
   if (!r.ok) throw new Error(`sarvam ${r.status}: ${(await r.text()).slice(0, 300)}`);
   const data = (await r.json()) as {
@@ -134,7 +140,12 @@ async function reply(env: Env, spec: RoundSpec) {
   if (parsed?.line) return { line: String(parsed.line).trim(), hint: String(parsed.hint ?? '').trim() };
   // Never let formatting kill a round: treat whatever was said as the line.
   const text = raw.split('<think>').map((part, i) => (i === 0 ? part : part.slice(part.indexOf('</think>') + 8))).join('').trim();
-  if (text) return { line: text.replace(/^["“]|["”]$/g, '').slice(0, 300), hint: '' };
+  if (text) {
+    return {
+      line: text.replace(/^["“]|["”]$/g, '').slice(0, 300),
+      hint: 'Hold your ground: one point, then one question.',
+    };
+  }
   throw new Error('model returned nothing');
 }
 
