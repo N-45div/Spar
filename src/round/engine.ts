@@ -33,10 +33,14 @@ export type ScoreResult = {
   moments: Moment[];
 };
 
+const DEFAULT_API_BASE = 'https://spar-api.spar-api.workers.dev';
+
 export function apiBase(): string | null {
   const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
   const url = extra.apiBaseUrl;
-  return typeof url === 'string' && url.length > 0 ? url.replace(/\/$/, '') : null;
+  if (url === 'none') return null;
+  const chosen = typeof url === 'string' && url.length > 0 ? url : DEFAULT_API_BASE;
+  return chosen.endsWith('/') ? chosen.slice(0, -1) : chosen;
 }
 
 async function post<T>(path: string, body: unknown, timeoutMs = 20000): Promise<T | null> {
