@@ -9,7 +9,7 @@ import {
 } from 'expo-audio';
 import * as Speech from 'expo-speech';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, Text, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, Text, View } from 'react-native';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import { Eyebrow } from '../components/Eyebrow';
 import { FlagIcon, MicIcon, XIcon } from '../components/icons';
@@ -70,6 +70,7 @@ export function RoundScreen({ navigation, route }: Props) {
   const pressureRef = useRef(initialPressure);
   const alive = useRef(true);
   const permission = useRef(false);
+  const pendingUtterance = useRef<string | null>(null);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const player = useAudioPlayer();
@@ -146,6 +147,12 @@ export function RoundScreen({ navigation, route }: Props) {
         permission.current = false;
       });
     setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true }).catch(() => {});
+    if (__DEV__ && Platform.OS === 'web') {
+      // Dev-only hook so automated demos/QA can feed a manager line instead of live audio.
+      (globalThis as { __sparSetUtterance?: (text: string) => void }).__sparSetUtterance = (text) => {
+        pendingUtterance.current = text;
+      };
+    }
     ask();
     return () => {
       alive.current = false;
@@ -214,11 +221,13 @@ export function RoundScreen({ navigation, route }: Props) {
     if (phase !== 'listening') return;
     setPhase('transcribing');
     let said = '';
+    const typed = pendingUtterance.current;
+    pendingUtterance.current = null;
     try {
       if (recorder.isRecording) await recorder.stop();
-      if (recorder.uri) said = await transcribe(recorder.uri);
+      said = typed ?? (recorder.uri ? await transcribe(recorder.uri) : '');
     } catch {
-      said = '';
+      said = typed ?? '';
     }
     if (!alive.current) return;
     if (said) {
