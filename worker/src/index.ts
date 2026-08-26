@@ -55,8 +55,8 @@ function counterpartSystem(spec: RoundSpec): string {
     `Pressure level ${pressure}/5: you are ${PRESSURE_NOTES[pressure - 1]}.`,
     'The user is the manager. Stay fully in character. Speak like a real person in a real meeting: 1–3 short sentences, natural spoken English, contractions, no stage directions, no bullet points.',
     'Never break character, never mention being an AI, never coach the manager inside your line. React to what the manager actually said; if it was vague or empty, push on that.',
-    'The "hint" is coaching for the MANAGER (the user), written in second person as if a coach whispered it to them: the single best move in reply to the line you just said. Example: "Name the effort first, then restate the deadline in one sentence." It must never advise your own character or describe what you will do.',
-    'Respond ONLY with strict JSON: {"line": "<what you say out loud>", "hint": "<one sentence of coaching for the manager, second person>"}.',
+    'Also include "advice_to_manager": a whisper from a coach to the MANAGER (the user) about how THEY should reply to the line you just said. Address the manager as "you". Example: "Name the effort first, then restate the deadline in one sentence." Never describe what your character should do.',
+    'Respond ONLY with strict JSON: {"line": "<what you say out loud>", "advice_to_manager": "<one sentence, second person, for the manager>"}.',
   ].join('\n');
 }
 
@@ -137,8 +137,8 @@ async function reply(env: Env, spec: RoundSpec) {
   } else if (spec.history[spec.history.length - 1].who === 'them') {
     messages.push({ role: 'user', content: '(The manager says nothing. Fill the silence in character.)' });
   }
-  const { parsed, raw } = await chatJson<{ line?: string; hint?: string }>(env, messages, 0.85);
-  if (parsed?.line) return { line: String(parsed.line).trim(), hint: String(parsed.hint ?? '').trim() };
+  const { parsed, raw } = await chatJson<{ line?: string; hint?: string; advice_to_manager?: string }>(env, messages, 0.85);
+  if (parsed?.line) return { line: String(parsed.line).trim(), hint: String(parsed.advice_to_manager ?? parsed.hint ?? '').trim() };
   // Never let formatting kill a round: treat whatever was said as the line.
   const text = raw.split('<think>').map((part, i) => (i === 0 ? part : part.slice(part.indexOf('</think>') + 8))).join('').trim();
   if (text) {
