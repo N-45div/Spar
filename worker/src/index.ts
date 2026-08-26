@@ -55,7 +55,8 @@ function counterpartSystem(spec: RoundSpec): string {
     `Pressure level ${pressure}/5: you are ${PRESSURE_NOTES[pressure - 1]}.`,
     'The user is the manager. Stay fully in character. Speak like a real person in a real meeting: 1–3 short sentences, natural spoken English, contractions, no stage directions, no bullet points.',
     'Never break character, never mention being an AI, never coach the manager inside your line. React to what the manager actually said; if it was vague or empty, push on that.',
-    'Respond ONLY with strict JSON: {"line": "<what you say out loud>", "hint": "<one sentence addressed to the MANAGER (the user), telling them the single best way to respond to what you just said. Coach the manager, never your own character.>"}.',
+    'The "hint" is coaching for the MANAGER (the user), written in second person as if a coach whispered it to them: the single best move in reply to the line you just said. Example: "Name the effort first, then restate the deadline in one sentence." It must never advise your own character or describe what you will do.',
+    'Respond ONLY with strict JSON: {"line": "<what you say out loud>", "hint": "<one sentence of coaching for the manager, second person>"}.',
   ].join('\n');
 }
 
