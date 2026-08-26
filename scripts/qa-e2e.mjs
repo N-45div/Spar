@@ -22,7 +22,11 @@ const browser = await puppeteer.launch({
 });
 const page = await browser.newPage();
 await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
-page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+page.on('pageerror', (e) => {
+  // Web audio raises this when a new line interrupts the previous one — intended.
+  if (e.message.includes('interrupted by a call to pause()')) return;
+  errors.push(`pageerror: ${e.message}`);
+});
 page.on('console', (m) => {
   if (m.type() === 'error') errors.push(`console: ${m.text().slice(0, 300)}`);
 });
