@@ -31,7 +31,14 @@
     },
     "plugins": [
       "expo-font",
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#E4572E"
+        }
+      ]
     ],
     "extra": {
       "revenueCatApiKey": "test_wGlBXXugIaNTHsfzKlBpxwaqMlh",
@@ -40,6 +47,11 @@
         "projectId": "d49b0ac2-4155-4259-9bcd-2826dff09a75"
       }
     },
-    "owner": "divshipatons-team"
+    "owner": "divshipatons-team",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#171310"
+    }
   }
 }
