@@ -165,6 +165,28 @@ async function score(env: Env, spec: RoundSpec) {
   return parsed;
 }
 
+function curveballSystem(): string {
+  return [
+    "You are an executive coach. A manager was hit with a difficult one-liner by a direct report and answered in one line.",
+    "Judge the manager's single reply on composure, clarity, and holding a boundary without bullying or caving.",
+    "Respond ONLY with strict JSON: {\"score\": 0-100, \"verdict\": \"<max 6 words, second person>\", \"note\": \"<one sentence of coaching, max 18 words>\", \"stronger\": \"<a stronger one-line reply the manager could have given, in natural spoken English>\"}",
+  ].join(String.fromCharCode(10));
+}
+
+async function curveball(env: Env, body: { line?: string; response?: string }) {
+  const line = String(body.line ?? '').trim();
+  const response = String(body.response ?? '').trim();
+  if (!line || !response) throw new Error('line and response are required');
+  const messages = [
+    { role: 'system', content: curveballSystem() },
+    { role: 'user', content: `THE REPORT SAID: "${line}"
+THE MANAGER REPLIED: "${response}"` },
+  ];
+  const { parsed, raw } = await chatJson<Record<string, unknown>>(env, messages, 0.4);
+  if (!parsed) throw new Error('no json in model output: ' + raw.slice(0, 120));
+  return parsed;
+}
+
 async function transcribe(env: Env, request: Request) {
   const contentType = request.headers.get('Content-Type') || 'audio/*';
   const r = await fetch('https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&language=en', {
@@ -215,6 +237,9 @@ export default {
         return json(await reply(env, { ...spec, history: spec.history ?? [] }));
       }
 
+      if (url.pathname === '/curveball' && request.method === 'POST') {
+        return json(await curveball(env, (await request.json()) as { line?: string; response?: string }));
+      }
       if (url.pathname === '/score' && request.method === 'POST') {
         const spec = (await request.json()) as RoundSpec;
         return json(await score(env, { ...spec, history: spec.history ?? [] }));
