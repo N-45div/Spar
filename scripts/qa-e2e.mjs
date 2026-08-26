@@ -118,6 +118,16 @@ check('home empty state', await waitText('The first round', 5000));
 check('home curveball', await waitText('never actually done my job', 5000));
 await shot('01-home');
 
+// 1b. Curveball — type a one-liner, the coach scores it inline
+const curveballInput = await page.$('textarea[placeholder^="Type your one-line"], input[placeholder^="Type your one-line"]');
+check('curveball input present', !!curveballInput);
+if (curveballInput) {
+  await curveballInput.type("You're right, I haven't. That's exactly why I need you to walk me through what's blocking you.");
+  check('tap score it', await clickText('Score it'));
+  check('curveball scored (stronger line shown)', await waitText('STRONGER', 60000));
+  await shot('01b-curveball-scored');
+}
+
 // 2. Freestyle persona
 check('tap rehearse', await clickText('Rehearse tonight'));
 check('persona renders', await waitText("Who's across", 30000));
