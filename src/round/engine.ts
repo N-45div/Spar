@@ -116,3 +116,21 @@ export async function scoreRound(spec: RoundSpec, history: Turn[]): Promise<Scor
       : [],
   };
 }
+
+export type CurveballResult = {
+  score: number;
+  verdict: string;
+  note: string;
+  stronger: string;
+};
+
+export async function scoreCurveball(line: string, response: string): Promise<CurveballResult | null> {
+  const result = await post<Partial<CurveballResult>>('/curveball', { line, response }, 30000);
+  if (!result || typeof result.score !== 'number') return null;
+  return {
+    score: Math.max(0, Math.min(100, Math.round(result.score))),
+    verdict: String(result.verdict ?? 'Scored.'),
+    note: String(result.note ?? ''),
+    stronger: String(result.stronger ?? ''),
+  };
+}

@@ -1,14 +1,23 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useCallback, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Eyebrow } from '../components/Eyebrow';
 import { ChevronIcon, SparkIcon } from '../components/icons';
 import { Screen } from '../components/Screen';
+import { curveballFor, dayKey } from '../data/curveballs';
 import { canStartRound } from '../monetization/gate';
 import { RootStackParamList } from '../navigation/types';
+import {
+  cancelDailyCurveball,
+  isDailyCurveballScheduled,
+  REMINDER_HOUR,
+  scheduleDailyCurveball,
+} from '../notifications/curveball';
+import { scoreCurveball } from '../round/engine';
+import { CurveballRecord, loadCurveball, saveCurveball } from '../store/curveball';
 import { bestScore, loadRounds, RoundRecord, trainingDays } from '../store/rounds';
 import { colors, fonts, radius, type } from '../theme/tokens';
 
@@ -29,17 +38,33 @@ export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [rounds, setRounds] = useState<RoundRecord[]>([]);
 
+  const today = dayKey();
+  const curveball = curveballFor();
+  const [response, setResponse] = useState('');
+  const [scoring, setScoring] = useState(false);
+  const [result, setResult] = useState<CurveballRecord | null>(null);
+  const [reminderOn, setReminderOn] = useState(false);
+  const remindersSupported = Platform.OS !== 'web';
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
       loadRounds().then((all) => {
         if (active) setRounds(all);
       });
+      loadCurveball(today).then((saved) => {
+        if (active) setResult(saved);
+      });
       return () => {
         active = false;
       };
-    }, []),
+    }, [today]),
   );
+
+  useEffect(() => {
+    if (!remindersSupported) return;
+    isDailyCurveballScheduled().then(setReminderOn);
+  }, [remindersSupported]);
 
   const best = bestScore(rounds);
   const days = trainingDays(rounds);
@@ -53,9 +78,27 @@ export function HomeScreen() {
     navigation.navigate('Persona');
   };
 
+  const submitCurveball = async () => {
+    const text = response.trim();
+    if (!text || scoring) return;
+    setScoring(true);
+    const scored = await scoreCurveball(curveball.line, text);
+    setScoring(false);
+    if (!scored) return;
+    const record: CurveballRecord = { ...scored, response: text, line: curveball.line };
+    setResult(record);
+    await saveCurveball(today, record);
+  };
+
+  const toggleReminder = async (value: boolean) => {
+    setReminderOn(value);
+    const ok = value ? await scheduleDailyCurveball() : (await cancelDailyCurveball(), false);
+    setReminderOn(ok);
+  };
+
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Eyebrow>{todayLabel()}</Eyebrow>
           {days > 0 && (
@@ -124,27 +167,89 @@ export function HomeScreen() {
           <Eyebrow>TODAY'S CURVEBALL</Eyebrow>
         </View>
         <Card style={{ marginTop: 8 }}>
-          <Text style={type.spoken}>
-            “With respect — you've never actually done my job.”
-          </Text>
-          <View
+          <Text style={type.spoken}>“{curveball.line}”</Text>
+          {result ? (
+            <View style={{ marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: radius.badge,
+                    backgroundColor: colors.surface2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ fontFamily: fonts.display, fontSize: 18, color: colors.ink }}>
+                    {result.score}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={type.label}>{result.verdict}</Text>
+                  <Text style={[type.bodySmall, { marginTop: 2 }]}>{result.note}</Text>
+                </View>
+              </View>
+              <Eyebrow size={9} style={{ marginTop: 12 }}>
+                STRONGER
+              </Eyebrow>
+              <Text style={[type.spoken, { fontSize: 15, lineHeight: 20, color: colors.inkSerif, marginTop: 4 }]}>
+                “{result.stronger}”
+              </Text>
+            </View>
+          ) : (
+            <>
+              <TextInput
+                value={response}
+                onChangeText={setResponse}
+                placeholder="Type your one-line response…"
+                placeholderTextColor={colors.inkFaint}
+                multiline
+                style={{
+                  marginTop: 11,
+                  borderWidth: 1,
+                  borderColor: colors.outline,
+                  borderRadius: radius.row,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  minHeight: 48,
+                  fontFamily: fonts.ui,
+                  fontSize: 13,
+                  color: colors.ink,
+                }}
+              />
+              <Button
+                label={scoring ? 'Coach is reading…' : 'Score it'}
+                variant="ghost"
+                style={{ marginTop: 10, opacity: response.trim() ? 1 : 0.5 }}
+                onPress={submitCurveball}
+              />
+            </>
+          )}
+        </Card>
+
+        {remindersSupported && (
+          <Pressable
+            onPress={() => toggleReminder(!reminderOn)}
             style={{
-              marginTop: 11,
-              borderWidth: 1,
-              borderColor: colors.outline,
-              borderRadius: radius.pill,
-              paddingVertical: 14,
-              paddingHorizontal: 16,
+              marginTop: 10,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 4,
             }}
           >
-            <Text style={{ fontFamily: fonts.ui, fontSize: 13, color: colors.inkFaint }}>
-              Type your one-line response…
+            <Text style={[type.bodySmall, { fontSize: 12 }]}>
+              {`Daily curveball · ${REMINDER_HOUR > 12 ? REMINDER_HOUR - 12 : REMINDER_HOUR}:00 ${REMINDER_HOUR >= 12 ? 'PM' : 'AM'}`}
             </Text>
-          </View>
-          <Text style={[type.bodySmall, { fontSize: 11, color: colors.inkFaint, marginTop: 8 }]}>
-            Or answer straight from the notification — scored either way.
-          </Text>
-        </Card>
+            <Switch
+              value={reminderOn}
+              onValueChange={toggleReminder}
+              trackColor={{ false: colors.surface2, true: colors.ember }}
+              thumbColor={colors.ink}
+            />
+          </Pressable>
+        )}
 
         <Eyebrow style={{ marginTop: 20 }}>RECENT ROUNDS</Eyebrow>
         {hasRounds ? (
