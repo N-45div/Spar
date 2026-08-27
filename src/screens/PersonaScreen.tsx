@@ -161,6 +161,7 @@ export function PersonaScreen({ navigation, route }: Props) {
               temperament,
               stakes,
               title: scenario?.title,
+              brief: scenario?.brief,
               language: hinglish ? 'hi' : 'en',
               pressure: scenario?.pressure ?? 2,
             })

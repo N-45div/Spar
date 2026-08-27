@@ -37,8 +37,18 @@ const VERDICTS = [
 type MomentView = { key: string; time: string; tag: string; good: boolean; quote: string; note: string };
 
 export function ScorecardScreen({ navigation, route }: Props) {
-  const { role, temperament, stakes, title: scenarioTitle, language, pressure, durationSec, exchanges, history } =
-    route.params;
+  const {
+    role,
+    temperament,
+    stakes,
+    title: scenarioTitle,
+    brief,
+    language,
+    pressure,
+    durationSec,
+    exchanges,
+    history,
+  } = route.params;
 
   const [result, setResult] = useState<ScoreResult | null>(null);
   const [coachReached, setCoachReached] = useState(true);
@@ -125,6 +135,7 @@ export function ScorecardScreen({ navigation, route }: Props) {
       temperament,
       stakes,
       title: scenarioTitle,
+      brief,
       language,
       pressure: pressure + 1,
     });

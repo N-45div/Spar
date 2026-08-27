@@ -15,6 +15,7 @@ export type RootStackParamList = {
   Scorecard: PersonaSpec & {
     pressure: number;
     title?: string;
+    brief?: string;
     language?: string;
     durationSec: number;
     exchanges: number;
