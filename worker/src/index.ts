@@ -287,9 +287,23 @@ async function hint(env: Env, spec: RoundSpec) {
   return { hint: text ? trimToSentence(text, 240) : '' };
 }
 
+// Sarvam accepts audio/x-m4a and audio/mp4 but rejects audio/m4a — the exact type the
+// recorder sends — with "Invalid file type", which silently demoted every Hinglish
+// turn to the Deepgram fallback.
+function sarvamAudioType(contentType: string): string {
+  const t = contentType.split(';')[0].trim().toLowerCase();
+  if (t === 'audio/m4a' || t === 'audio/x-m4a' || t === 'audio/mp4') return 'audio/x-m4a';
+  if (t === 'audio/wav' || t === 'audio/wave' || t === 'audio/x-wav') return 'audio/wav';
+  if (t === 'audio/mpeg' || t === 'audio/mp3') return 'audio/mpeg';
+  if (t === 'audio/webm' || t.startsWith('audio/webm')) return 'audio/webm';
+  return 'audio/x-m4a';
+}
+
 async function sarvamTranscribe(env: Env, audio: ArrayBuffer, contentType: string) {
   const form = new FormData();
-  form.append('file', new Blob([audio], { type: contentType }), 'round.wav');
+  const type = sarvamAudioType(contentType);
+  const name = type === 'audio/wav' ? 'round.wav' : 'round.m4a';
+  form.append('file', new Blob([audio], { type }), name);
   form.append('model', 'saarika:v2.5');
   form.append('language_code', 'hi-IN');
   const r = await fetch('https://api.sarvam.ai/speech-to-text', {
@@ -396,7 +410,8 @@ export default {
       }
 
       if (url.pathname === '/hint' && request.method === 'POST') {
-        return json(await hint(env, (await request.json()) as RoundSpec));
+        const hintSpec = (await request.json()) as RoundSpec;
+        return json(await hint(env, { ...hintSpec, history: hintSpec.history ?? [] }));
       }
       if (url.pathname === '/curveball' && request.method === 'POST') {
         return json(await curveball(env, (await request.json()) as { line?: string; response?: string }));
