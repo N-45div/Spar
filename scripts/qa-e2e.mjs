@@ -119,7 +119,13 @@ const shot = (name) => page.screenshot({ path: `${shotDir}/${name}.png` });
 await page.goto('http://localhost:8081', { waitUntil: 'networkidle2', timeout: 180000 });
 check('home renders', await waitText('Rehearse tonight', 240000));
 check('home empty state', await waitText('The first round', 5000));
-check('home curveball', await waitText('never actually done my job', 5000));
+// The curveball rotates daily, so assert the section and a quoted line, not one day's text.
+check('home curveball section', await waitText("TODAY'S CURVEBALL", 5000));
+const curveballLine = await page.evaluate(() => {
+  const els = [...document.querySelectorAll('div')].filter((e) => e.children.length === 0 && e.textContent.trim().startsWith('“'));
+  return els[0]?.textContent.trim() ?? '';
+});
+check(`home curveball line present (${curveballLine.slice(0, 40)})`, curveballLine.length > 4);
 await shot('01-home');
 
 // 1b. Curveball — type a one-liner, the coach scores it inline
