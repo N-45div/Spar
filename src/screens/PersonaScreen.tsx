@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Chip } from '../components/Chip';
@@ -10,6 +10,7 @@ import { IconButton } from '../components/IconButton';
 import { Screen } from '../components/Screen';
 import { RootStackParamList } from '../navigation/types';
 import { colors, fonts, radius, type } from '../theme/tokens';
+import { contentColumn } from '../theme/layout';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Persona'>;
 
@@ -36,13 +37,14 @@ export function PersonaScreen({ navigation, route }: Props) {
   const [temperament, setTemperament] = useState(scenario?.temperament ?? 'Defensive');
   const [stakes, setStakes] = useState(scenario?.stakes ?? 'High');
   const [note, setNote] = useState('');
+  const [hinglish, setHinglish] = useState(false);
 
   const article = /^[aeiou]/i.test(temperament) ? 'An' : 'A';
   const file = `${article} ${temperament.toLowerCase()} ${role.toLowerCase()} who ${TEMPERAMENT_CLAUSE[temperament]}. ${STAKES_CLAUSE[stakes]}`;
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 8, flexGrow: 1 }}>
+      <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 8, flexGrow: 1 , ...contentColumn }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <IconButton onPress={() => navigation.goBack()}>
             <BackIcon color={colors.inkDim} />
@@ -108,6 +110,47 @@ export function PersonaScreen({ navigation, route }: Props) {
           }}
         />
 
+        <Pressable
+          onPress={() => setHinglish((value) => !value)}
+          style={{
+            marginTop: 12,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderWidth: 1,
+            borderColor: hinglish ? colors.ember : colors.outline,
+            backgroundColor: hinglish ? 'rgba(228,87,46,0.07)' : 'transparent',
+            borderRadius: radius.row,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+          }}
+        >
+          <View>
+            <Text style={{ fontFamily: fonts.uiMedium, fontSize: 14, color: colors.ink }}>Rehearse in Hinglish</Text>
+            <Text style={[type.bodySmall, { marginTop: 2 }]}>They talk like an Indian office colleague</Text>
+          </View>
+          <View
+            style={{
+              width: 40,
+              height: 24,
+              borderRadius: 12,
+              backgroundColor: hinglish ? colors.ember : colors.surface2,
+              justifyContent: 'center',
+              paddingHorizontal: 3,
+            }}
+          >
+            <View
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: 9,
+                backgroundColor: hinglish ? colors.onEmber : colors.inkFaint,
+                alignSelf: hinglish ? 'flex-end' : 'flex-start',
+              }}
+            />
+          </View>
+        </Pressable>
+
         <View style={{ flex: 1 }} />
         <Button
           label="Begin round one"
@@ -118,6 +161,7 @@ export function PersonaScreen({ navigation, route }: Props) {
               temperament,
               stakes,
               title: scenario?.title,
+              language: hinglish ? 'hi' : 'en',
               pressure: scenario?.pressure ?? 2,
             })
           }

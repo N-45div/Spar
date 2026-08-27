@@ -11,10 +11,11 @@ export type RootStackParamList = {
   Tabs: undefined;
   Paywall: undefined;
   Persona: { scenario?: Scenario } | undefined;
-  Round: PersonaSpec & { pressure: number; title?: string; brief?: string };
+  Round: PersonaSpec & { pressure: number; title?: string; brief?: string; language?: string };
   Scorecard: PersonaSpec & {
     pressure: number;
     title?: string;
+    language?: string;
     durationSec: number;
     exchanges: number;
     history: Turn[];
