@@ -1,5 +1,5 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
@@ -9,6 +9,7 @@ import { BackIcon } from '../components/icons';
 import { IconButton } from '../components/IconButton';
 import { Screen } from '../components/Screen';
 import { RootStackParamList } from '../navigation/types';
+import { prefetchOpener } from '../round/engine';
 import { colors, fonts, radius, type } from '../theme/tokens';
 import { contentColumn } from '../theme/layout';
 
@@ -38,6 +39,23 @@ export function PersonaScreen({ navigation, route }: Props) {
   const [stakes, setStakes] = useState(scenario?.stakes ?? 'High');
   const [note, setNote] = useState('');
   const [hinglish, setHinglish] = useState(false);
+
+  // Warm the opening line while they are still choosing, so the round can start
+  // talking instead of making them watch a spinner.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      prefetchOpener({
+        role,
+        temperament,
+        stakes,
+        title: scenario?.title,
+        brief: scenario?.brief,
+        language: hinglish ? 'hi' : 'en',
+        pressure: scenario?.pressure ?? 2,
+      });
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [role, temperament, stakes, hinglish, scenario]);
 
   const article = /^[aeiou]/i.test(temperament) ? 'An' : 'A';
   const file = `${article} ${temperament.toLowerCase()} ${role.toLowerCase()} who ${TEMPERAMENT_CLAUSE[temperament]}. ${STAKES_CLAUSE[stakes]}`;

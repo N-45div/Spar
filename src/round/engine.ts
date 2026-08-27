@@ -71,7 +71,32 @@ export function scriptedHint(spec: RoundSpec, history: Turn[]): string {
   return script[Math.max(0, index)].hint;
 }
 
-export async function nextLine(spec: RoundSpec, history: Turn[]): Promise<CounterpartTurn> {
+function openerKey(spec: RoundSpec): string {
+  return [
+    spec.role,
+    spec.temperament,
+    spec.stakes,
+    spec.title ?? '',
+    spec.language ?? 'en',
+    spec.pressure,
+  ].join('|');
+}
+
+let opener: { key: string; promise: Promise<CounterpartTurn> } | null = null;
+
+// The opening line depends only on the persona, not on anything said in the round,
+// so it can be fetched while the user is still choosing. By the time they tap
+// "Begin round one" it is usually already waiting.
+export function prefetchOpener(spec: RoundSpec): void {
+  if (!apiBase()) return;
+  const key = openerKey(spec);
+  if (opener?.key === key) return;
+  const promise = fetchLine(spec, []);
+  promise.catch(() => undefined);
+  opener = { key, promise };
+}
+
+async function fetchLine(spec: RoundSpec, history: Turn[]): Promise<CounterpartTurn> {
   const remote = await post<{ line?: string; hint?: string }>('/reply', { ...spec, history });
   if (remote?.line) {
     // The counterpart no longer writes coaching; /hint does. Until it lands, show
@@ -81,6 +106,20 @@ export async function nextLine(spec: RoundSpec, history: Turn[]): Promise<Counte
   const script = buildScript(spec.temperament, spec.pressure, spec.language);
   const index = Math.min(history.filter((t) => t.who === 'them').length, script.length - 1);
   return script[index];
+}
+
+export async function nextLine(spec: RoundSpec, history: Turn[]): Promise<CounterpartTurn> {
+  if (history.length === 0 && opener?.key === openerKey(spec)) {
+    const pending = opener.promise;
+    opener = null;
+    try {
+      const ready = await pending;
+      if (ready?.line) return ready;
+    } catch {
+      // fall through and fetch it normally
+    }
+  }
+  return fetchLine(spec, history);
 }
 
 export function speakUrl(text: string, language = 'en'): string | null {
