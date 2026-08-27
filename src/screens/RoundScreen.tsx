@@ -72,6 +72,7 @@ export function RoundScreen({ navigation, route }: Props) {
   const [phase, setPhase] = useState<Phase>('thinking');
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [lastSaid, setLastSaid] = useState('');
+  const [micBlocked, setMicBlocked] = useState(false);
   const [seconds, setSeconds] = useState(0);
 
   const history = useRef<Turn[]>([]);
@@ -81,6 +82,9 @@ export function RoundScreen({ navigation, route }: Props) {
   const permission = useRef(false);
   const pendingUtterance = useRef<string | null>(null);
   const hintTurn = useRef(0);
+  const recordingStarted = useRef(false);
+  const playingRef = useRef(false);
+  const voiceFallback = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const player = useAudioPlayer();
@@ -93,11 +97,27 @@ export function RoundScreen({ navigation, route }: Props) {
   }, [pressure]);
 
   useEffect(() => {
+    playingRef.current = playerStatus.playing;
+    if (playerStatus.playing && voiceFallback.current) {
+      clearTimeout(voiceFallback.current);
+      voiceFallback.current = null;
+    }
+  }, [playerStatus.playing]);
+
+  useEffect(() => {
     const timer = setInterval(() => setSeconds((value) => value + 1), 1000);
     return () => clearInterval(timer);
   }, []);
 
+  const clearVoiceFallback = () => {
+    if (voiceFallback.current) {
+      clearTimeout(voiceFallback.current);
+      voiceFallback.current = null;
+    }
+  };
+
   const stopSpeaking = () => {
+    clearVoiceFallback();
     try {
       player.pause();
     } catch {
@@ -107,18 +127,7 @@ export function RoundScreen({ navigation, route }: Props) {
     setLocalSpeaking(false);
   };
 
-  const speak = (text: string) => {
-    stopSpeaking();
-    const url = speakUrl(text, language);
-    if (url) {
-      try {
-        player.replace({ uri: url });
-        player.play();
-        return;
-      } catch {
-        // fall through to system voice
-      }
-    }
+  const speakWithSystemVoice = (text: string) => {
     setLocalSpeaking(true);
     Speech.speak(text, {
       rate: 0.98,
@@ -127,6 +136,28 @@ export function RoundScreen({ navigation, route }: Props) {
       onStopped: () => setLocalSpeaking(false),
       onError: () => setLocalSpeaking(false),
     });
+  };
+
+  const speak = (text: string) => {
+    stopSpeaking();
+    const url = speakUrl(text, language);
+    if (url) {
+      try {
+        player.replace({ uri: url });
+        player.play();
+        // play() returns before the audio has loaded, so a failed fetch is silent.
+        // If nothing is playing shortly after, say the line with the system voice
+        // rather than letting the round continue as if she had spoken.
+        voiceFallback.current = setTimeout(() => {
+          voiceFallback.current = null;
+          if (alive.current && !playingRef.current) speakWithSystemVoice(text);
+        }, 2500);
+        return;
+      } catch {
+        // fall through to system voice
+      }
+    }
+    speakWithSystemVoice(text);
   };
 
   const spec = () => ({
@@ -175,6 +206,7 @@ export function RoundScreen({ navigation, route }: Props) {
     ask();
     return () => {
       alive.current = false;
+      clearVoiceFallback();
       stopSpeaking();
     };
   }, []);
@@ -209,6 +241,7 @@ export function RoundScreen({ navigation, route }: Props) {
       temperament,
       stakes,
       title,
+      brief,
       language,
       pressure,
       durationSec: seconds,
@@ -221,6 +254,7 @@ export function RoundScreen({ navigation, route }: Props) {
     if (phase !== 'ready') return;
     stopSpeaking();
     setPhase('listening');
+    recordingStarted.current = false;
     if (!permission.current) {
       try {
         permission.current = (await requestRecordingPermissionsAsync()).granted;
@@ -228,24 +262,39 @@ export function RoundScreen({ navigation, route }: Props) {
         permission.current = false;
       }
     }
-    if (!permission.current) return;
+    if (!permission.current) {
+      setMicBlocked(true);
+      setPhase('ready');
+      return;
+    }
+    setMicBlocked(false);
     try {
       await recorder.prepareToRecordAsync();
       recorder.record();
+      recordingStarted.current = true;
     } catch {
-      // recording unavailable on this platform — the round still advances
+      recordingStarted.current = false;
     }
   };
 
   const onPressOut = async () => {
     if (phase !== 'listening') return;
-    setPhase('transcribing');
-    let said = '';
     const typed = pendingUtterance.current;
     pendingUtterance.current = null;
+    if (!recordingStarted.current && typed == null) {
+      // Nothing was captured, so this is not a turn: do not spend an exchange or
+      // ask the counterpart to answer silence.
+      setPhase('ready');
+      return;
+    }
+    setPhase('transcribing');
+    let said = '';
     try {
       if (recorder.isRecording) await recorder.stop();
-      said = typed ?? (recorder.uri ? await transcribe(recorder.uri, undefined, language) : '');
+      // Only trust recorder.uri when this turn actually recorded — a stale uri from
+      // a previous turn would otherwise be transcribed again.
+      const uri = recordingStarted.current ? recorder.uri : null;
+      said = typed ?? (uri ? await transcribe(uri, undefined, language) : '');
     } catch {
       said = typed ?? '';
     }
@@ -488,6 +537,16 @@ export function RoundScreen({ navigation, route }: Props) {
       <Eyebrow size={9} style={{ textAlign: 'center', marginTop: 9 }}>
         {pttStatus}
       </Eyebrow>
+      {micBlocked && (
+        <Text
+          style={[
+            type.bodySmall,
+            { fontSize: 11, textAlign: 'center', marginTop: 6, color: colors.ember },
+          ]}
+        >
+          Spar needs the microphone to hear your answer.
+        </Text>
+      )}
     </>
   );
 
