@@ -14,6 +14,7 @@ type RoundSpec = {
   stakes: string;
   title?: string;
   brief?: string;
+  language?: string;
   pressure: number;
   history: Turn[];
 };
@@ -53,10 +54,12 @@ function counterpartSystem(spec: RoundSpec): string {
     `Stakes for you: ${spec.stakes}.`,
     spec.title ? `Scenario: ${spec.title}.${spec.brief ? ' ' + spec.brief : ''}` : 'Scenario: the manager has asked to talk about a pattern in your work.',
     `Pressure level ${pressure}/5: you are ${PRESSURE_NOTES[pressure - 1]}.`,
+    spec.language === 'hi'
+      ? 'Speak in natural Hinglish - Hindi and English mixed the way people actually talk in Indian offices - written in Roman (Latin) script only, never Devanagari. Keep the same length and bite.'
+      : 'Speak in natural spoken English.',
     'The user is the manager. Stay fully in character. Speak like a real person in a real meeting: 1–3 short sentences, natural spoken English, contractions, no stage directions, no bullet points.',
     'Never break character, never mention being an AI, never coach the manager inside your line. React to what the manager actually said; if it was vague or empty, push on that.',
-    'Also include "advice_to_manager": a whisper from a coach to the MANAGER (the user) about how THEY should reply to the line you just said. Address the manager as "you". Example: "Name the effort first, then restate the deadline in one sentence." Never describe what your character should do.',
-    'Respond ONLY with strict JSON: {"line": "<what you say out loud>", "advice_to_manager": "<one sentence, second person, for the manager>"}.',
+    'Respond ONLY with strict JSON: {"line": "<what you say out loud>"}.',
   ].join('\n');
 }
 
@@ -188,21 +191,113 @@ THE MANAGER REPLIED: "${response}"` },
   return parsed;
 }
 
-async function transcribe(env: Env, request: Request) {
-  const contentType = request.headers.get('Content-Type') || 'audio/*';
-  const r = await fetch('https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&language=en', {
+function trimToSentence(text: string, max: number): string {
+  const clean = text.trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max);
+  const lastStop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
+  if (lastStop > max * 0.5) return cut.slice(0, lastStop + 1);
+  const lastSpace = cut.lastIndexOf(' ');
+  return (lastSpace > 0 ? cut.slice(0, lastSpace) : cut).replace(/[,;:]$/, '') + '…';
+}
+
+function hintSystem(): string {
+  return [
+    "You are a sharp, warm executive coach sitting beside a MANAGER who is rehearsing a hard conversation. You are on the manager's side.",
+    "The manager's counterpart just spoke. Whisper the single best move the manager should make in reply: ONE sentence, at most 25 words, second person, concrete, no preamble. Never exceed one sentence.",
+    "Good hints name a technique and apply it: acknowledge X then restate Y; ask one specific question; hold the boundary without apologizing; do not take the bait about Z.",
+    "Respond ONLY with strict JSON: {\"hint\": \"<one sentence for the manager>\"}",
+  ].join(String.fromCharCode(10));
+}
+
+async function hint(env: Env, spec: RoundSpec) {
+  const lastThem = [...spec.history].reverse().find((t) => t.who === 'them')?.text ?? '';
+  const recent = spec.history.slice(-6).map((t) => `${t.who === 'them' ? 'COUNTERPART' : 'MANAGER'}: ${t.text}`).join(String.fromCharCode(10));
+  const messages = [
+    { role: 'system', content: hintSystem() },
+    {
+      role: 'user',
+      content: `Scenario: ${spec.title ?? 'freestyle'} · counterpart: ${spec.temperament} ${spec.role} · pressure ${spec.pressure}/5` + String.fromCharCode(10) + `Recent exchange:` + String.fromCharCode(10) + recent + String.fromCharCode(10) + `The counterpart just said: "${lastThem}"` + String.fromCharCode(10) + `What is the manager's best move right now?`,
+    },
+  ];
+  const { parsed, raw } = await chatJson<{ hint?: string }>(env, messages, 0.5);
+  const text = String(parsed?.hint ?? '').trim();
+  return { hint: text ? trimToSentence(text, 240) : '' };
+}
+
+async function sarvamTranscribe(env: Env, audio: ArrayBuffer, contentType: string) {
+  const form = new FormData();
+  form.append('file', new Blob([audio], { type: contentType }), 'round.wav');
+  form.append('model', 'saarika:v2.5');
+  form.append('language_code', 'hi-IN');
+  const r = await fetch('https://api.sarvam.ai/speech-to-text', {
     method: 'POST',
-    headers: { Authorization: `Token ${env.DEEPGRAM_API_KEY}`, 'Content-Type': contentType },
-    body: request.body,
+    headers: { 'api-subscription-key': env.SARVAM_API_KEY },
+    body: form,
   });
+  if (!r.ok) throw new Error(`sarvam stt ${r.status}`);
+  const data = (await r.json()) as { transcript?: string };
+  return (data.transcript ?? '').trim();
+}
+
+async function deepgramTranscribe(env: Env, audio: ArrayBuffer, contentType: string, language: string) {
+  const r = await fetch(
+    `https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&language=${language}`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Token ${env.DEEPGRAM_API_KEY}`, 'Content-Type': contentType },
+      body: audio,
+    },
+  );
   if (!r.ok) throw new Error(`deepgram listen ${r.status}: ${(await r.text()).slice(0, 300)}`);
   const data = (await r.json()) as {
     results?: { channels?: { alternatives?: { transcript?: string }[] }[] };
   };
-  return data.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? '';
+  return (data.results?.channels?.[0]?.alternatives?.[0]?.transcript ?? '').trim();
 }
 
-async function speak(env: Env, text: string, voice: string) {
+async function transcribe(env: Env, request: Request, lang: string) {
+  const contentType = request.headers.get('Content-Type') || 'audio/*';
+  const audio = await request.arrayBuffer();
+  if (lang === 'hi') {
+    // Sarvam handles Hinglish best; Deepgram multi is the safety net.
+    // (Deepgram with language=en returns an empty transcript for Hinglish speech.)
+    try {
+      const viaSarvam = await sarvamTranscribe(env, audio, contentType);
+      if (viaSarvam) return viaSarvam;
+    } catch {
+      // fall through
+    }
+    return deepgramTranscribe(env, audio, contentType, 'multi');
+  }
+  return deepgramTranscribe(env, audio, contentType, 'en');
+}
+
+async function speakHinglish(env: Env, text: string) {
+  const r = await fetch('https://api.sarvam.ai/text-to-speech', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'api-subscription-key': env.SARVAM_API_KEY },
+    body: JSON.stringify({
+      text: text.slice(0, 1400),
+      target_language_code: 'hi-IN',
+      speaker: 'anushka',
+      model: 'bulbul:v2',
+    }),
+  });
+  if (!r.ok) throw new Error(`sarvam tts ${r.status}: ${(await r.text()).slice(0, 300)}`);
+  const data = (await r.json()) as { audios?: string[] };
+  const b64 = data.audios?.[0];
+  if (!b64) throw new Error('sarvam tts returned no audio');
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let n = 0; n < binary.length; n++) bytes[n] = binary.charCodeAt(n);
+  return new Response(bytes, {
+    headers: { 'Content-Type': 'audio/wav', 'Cache-Control': 'no-store', ...CORS },
+  });
+}
+
+async function speak(env: Env, text: string, voice: string, lang: string) {
+  if (lang === 'hi') return speakHinglish(env, text);
   const model = /^aura-2-[a-z]+-en$/.test(voice) ? voice : 'aura-2-thalia-en';
   const r = await fetch(`https://api.deepgram.com/v1/speak?model=${model}&encoding=mp3`, {
     method: 'POST',
@@ -226,11 +321,11 @@ export default {
       if (url.pathname === '/speak' && request.method === 'GET') {
         const text = (url.searchParams.get('text') || '').slice(0, 600);
         if (!text) return json({ error: 'text required' }, 400);
-        return await speak(env, text, url.searchParams.get('voice') || '');
+        return await speak(env, text, url.searchParams.get('voice') || '', url.searchParams.get('lang') || 'en');
       }
 
       if (url.pathname === '/transcribe' && request.method === 'POST') {
-        return json({ text: await transcribe(env, request) });
+        return json({ text: await transcribe(env, request, url.searchParams.get('lang') || 'en') });
       }
 
       if (url.pathname === '/reply' && request.method === 'POST') {
@@ -238,6 +333,9 @@ export default {
         return json(await reply(env, { ...spec, history: spec.history ?? [] }));
       }
 
+      if (url.pathname === '/hint' && request.method === 'POST') {
+        return json(await hint(env, (await request.json()) as RoundSpec));
+      }
       if (url.pathname === '/curveball' && request.method === 'POST') {
         return json(await curveball(env, (await request.json()) as { line?: string; response?: string }));
       }
