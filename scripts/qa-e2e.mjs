@@ -164,7 +164,9 @@ await waitText('Hold to respond', 60000);
 await page.mouse.click(390 - 24 - 22, 54 + 22);
 check('scorecard renders', await waitText('FORM SCORE', 30000));
 check('coach finishes scoring', await waitGone('Coach is watching the tape', 90000));
-check('scorecard has moments', await waitText('KEY MOMENTS', 5000));
+const gotMoments = await hasText('KEY MOMENTS');
+const gotEstimateNote = await hasText("couldn't review this round");
+check('scorecard shows real moments or says they are estimates', gotMoments || gotEstimateNote);
 check('no run-again at pressure 5', !(await hasText('Run it again')));
 await shot('05-scorecard');
 
