@@ -10,9 +10,9 @@ import { Screen } from '../components/Screen';
 import { canStartRound } from '../monetization/gate';
 import { RootStackParamList } from '../navigation/types';
 import { apiBase, scoreRound, ScoreResult } from '../round/engine';
-import { MOMENTS } from '../round/script';
 import { appendRound } from '../store/rounds';
 import { colors, fonts, radius, type } from '../theme/tokens';
+import { contentColumn } from '../theme/layout';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Scorecard'>;
 
@@ -37,10 +37,11 @@ const VERDICTS = [
 type MomentView = { key: string; time: string; tag: string; good: boolean; quote: string; note: string };
 
 export function ScorecardScreen({ navigation, route }: Props) {
-  const { role, temperament, stakes, title: scenarioTitle, pressure, durationSec, exchanges, history } =
+  const { role, temperament, stakes, title: scenarioTitle, language, pressure, durationSec, exchanges, history } =
     route.params;
 
   const [result, setResult] = useState<ScoreResult | null>(null);
+  const [coachReached, setCoachReached] = useState(true);
   const [scoring, setScoring] = useState(apiBase() != null && history.length > 1);
 
   // Heuristic fallback when no coach is reachable.
@@ -66,7 +67,7 @@ export function ScorecardScreen({ navigation, route }: Props) {
         quote: m.quote,
         note: m.note,
       }))
-    : MOMENTS.map((m) => ({ key: m.time, ...m }));
+    : [];
 
   const bars = [
     { label: 'Clarity', value: clarity, fill: colors.inkSerif },
@@ -82,6 +83,7 @@ export function ScorecardScreen({ navigation, route }: Props) {
     const finish = (scored: ScoreResult | null) => {
       if (!active) return;
       setResult(scored);
+      setCoachReached(scored != null);
       setScoring(false);
       if (saved.current) return;
       saved.current = true;
@@ -104,7 +106,7 @@ export function ScorecardScreen({ navigation, route }: Props) {
       });
     };
     if (scoring) {
-      scoreRound({ role, temperament, stakes, title: scenarioTitle, pressure }, history).then(finish);
+      scoreRound({ role, temperament, stakes, title: scenarioTitle, language, pressure }, history).then(finish);
     } else {
       finish(null);
     }
@@ -123,13 +125,14 @@ export function ScorecardScreen({ navigation, route }: Props) {
       temperament,
       stakes,
       title: scenarioTitle,
+      language,
       pressure: pressure + 1,
     });
   };
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 8, flexGrow: 1 }}>
+      <ScrollView contentContainerStyle={{ padding: 24, paddingTop: 8, flexGrow: 1 , ...contentColumn }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Eyebrow>{`ROUND 1 · ${formatClock(durationSec)} · PRESSURE ${pressure}`}</Eyebrow>
           <IconButton onPress={() => navigation.popToTop()} style={{ borderWidth: 0 }}>
@@ -157,7 +160,7 @@ export function ScorecardScreen({ navigation, route }: Props) {
             >
               <Eyebrow size={9} color={colors.jade}>{`+${delta} VS LAST`}</Eyebrow>
             </View>
-            <Eyebrow size={9}>FORM SCORE</Eyebrow>
+            <Eyebrow size={9}>{coachReached ? 'FORM SCORE' : 'ESTIMATED'}</Eyebrow>
           </View>
         </View>
 
@@ -193,7 +196,13 @@ export function ScorecardScreen({ navigation, route }: Props) {
           ))}
         </View>
 
-        <Eyebrow style={{ marginTop: 18 }}>KEY MOMENTS</Eyebrow>
+        {!scoring && !coachReached && (
+          <Text style={[type.bodySmall, { fontSize: 11, marginTop: 10, color: colors.inkFaint }]}>
+            The coach couldn't review this round, so these are estimates from how far you went.
+          </Text>
+        )}
+
+        {moments.length > 0 && <Eyebrow style={{ marginTop: 18 }}>KEY MOMENTS</Eyebrow>}
         <View style={{ marginTop: 8, gap: 8, opacity: scoring ? 0.35 : 1 }}>
           {moments.map((moment) => (
             <Card key={moment.key} variant="row" style={{ padding: 12, paddingHorizontal: 14 }}>
