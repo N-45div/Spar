@@ -6,6 +6,7 @@ import { Eyebrow } from '../components/Eyebrow';
 import { Screen } from '../components/Screen';
 import { bestScore, loadRounds, RoundRecord, trainingDays } from '../store/rounds';
 import { colors, fonts, radius, type } from '../theme/tokens';
+import { contentColumn } from '../theme/layout';
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
@@ -40,7 +41,7 @@ export function ProgressScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 32 , ...contentColumn }}>
         <Eyebrow>PROGRESS</Eyebrow>
         <Text style={[type.display, { marginTop: 12 }]}>Your form over time</Text>
 

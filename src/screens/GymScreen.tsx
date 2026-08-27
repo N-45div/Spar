@@ -9,6 +9,7 @@ import { PACKS, Scenario } from '../data/packs';
 import { canOpenProPack, canStartRound } from '../monetization/gate';
 import { RootStackParamList } from '../navigation/types';
 import { colors, fonts, radius, type } from '../theme/tokens';
+import { contentColumn } from '../theme/layout';
 
 export function GymScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -27,7 +28,7 @@ export function GymScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 32 , ...contentColumn }}>
         <Eyebrow>THE GYM</Eyebrow>
         <Text style={[type.display, { marginTop: 12 }]}>Scenario packs</Text>
         <Text style={[type.body, { marginTop: 8 }]}>Pick the conversation. We'll pick the fight.</Text>

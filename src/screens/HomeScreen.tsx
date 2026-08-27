@@ -20,6 +20,7 @@ import { scoreCurveball } from '../round/engine';
 import { CurveballRecord, loadCurveball, saveCurveball } from '../store/curveball';
 import { bestScore, loadRounds, RoundRecord, trainingDays } from '../store/rounds';
 import { colors, fonts, radius, type } from '../theme/tokens';
+import { contentColumn } from '../theme/layout';
 
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -98,7 +99,7 @@ export function HomeScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 32 , ...contentColumn }} keyboardShouldPersistTaps="handled">
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Eyebrow>{todayLabel()}</Eyebrow>
           {days > 0 && (

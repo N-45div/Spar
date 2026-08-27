@@ -16,6 +16,7 @@ import {
 } from '../monetization/purchases';
 import { RootStackParamList } from '../navigation/types';
 import { colors, fonts, radius, type } from '../theme/tokens';
+import { contentColumn } from '../theme/layout';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Paywall'>;
 
@@ -73,7 +74,7 @@ export function PaywallScreen({ navigation }: Props) {
 
   return (
     <Screen>
-      <View style={{ flex: 1, padding: 24, paddingTop: 8 }}>
+      <View style={{ flex: 1, padding: 24, paddingTop: 8, ...contentColumn }}>
         <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
           <Pressable onPress={() => navigation.goBack()} style={{ padding: 14, margin: -14 }}>
             <XIcon size={16} color={colors.inkFaint} />
