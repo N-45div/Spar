@@ -126,7 +126,7 @@ function extractJson<T>(text: string): T {
   // Sarvam opens a round with `{ "<the line>"` — a bare string where the key
   // belongs — and then, pinned to JSON grammar by response_format, pads
   // whitespace until max_tokens and never closes the brace. Keep what it said.
-  const bare = /\{\s*("(?:[^"\\]|\\.)*")/.exec(cleaned.slice(start));
+  const bare = /\{\s*("(?:[^"\\]|\\.)*")(?!\s*:)/.exec(cleaned.slice(start));
   if (bare) return JSON.parse(`{"line": ${bare[1]}}`) as T;
   throw new Error('no json in model output');
 }
@@ -215,7 +215,7 @@ async function score(env: Env, spec: RoundSpec) {
       content: `Scenario: ${spec.title ?? 'freestyle'} · counterpart: ${spec.temperament} ${spec.role} · pressure ${spec.pressure}/5\n\nTRANSCRIPT:\n${transcript}`,
     },
   ];
-  const { parsed, raw } = await chatJson<Record<string, unknown>>(env, messages, 0.3);
+  const { parsed, raw } = await chatJson<Record<string, unknown>>(env, messages, 0.3, 400);
   if (!parsed) throw new Error('no json in model output: ' + raw.slice(0, 120));
   return parsed;
 }
