@@ -13,6 +13,7 @@ export type RoundSpec = {
   stakes: string;
   title?: string;
   brief?: string;
+  language?: string;
   pressure: number;
 };
 
@@ -64,34 +65,52 @@ async function post<T>(path: string, body: unknown, timeoutMs = 20000): Promise<
   }
 }
 
+export function scriptedHint(spec: RoundSpec, history: Turn[]): string {
+  const script = buildScript(spec.temperament, spec.pressure, spec.language);
+  const index = Math.min(history.filter((t) => t.who === 'them').length, script.length - 1);
+  return script[Math.max(0, index)].hint;
+}
+
 export async function nextLine(spec: RoundSpec, history: Turn[]): Promise<CounterpartTurn> {
   const remote = await post<{ line?: string; hint?: string }>('/reply', { ...spec, history });
-  if (remote?.line) return { line: remote.line, hint: remote.hint ?? '' };
-  const script = buildScript(spec.temperament, spec.pressure);
+  if (remote?.line) {
+    // The counterpart no longer writes coaching; /hint does. Until it lands, show
+    // the scripted hint for this beat rather than an empty card.
+    return { line: remote.line, hint: remote.hint || scriptedHint(spec, history) };
+  }
+  const script = buildScript(spec.temperament, spec.pressure, spec.language);
   const index = Math.min(history.filter((t) => t.who === 'them').length, script.length - 1);
   return script[index];
 }
 
-export function speakUrl(text: string): string | null {
+export function speakUrl(text: string, language = 'en'): string | null {
   const base = apiBase();
-  return base ? `${base}/speak?text=${encodeURIComponent(text)}` : null;
+  if (!base) return null;
+  const lang = language === 'hi' ? '&lang=hi' : '';
+  return `${base}/speak?text=${encodeURIComponent(text)}${lang}`;
 }
 
-export async function transcribe(uri: string, mimeType?: string): Promise<string> {
+export async function transcribe(uri: string, mimeType?: string, language = 'en'): Promise<string> {
   const base = apiBase();
   if (!base) return '';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
   try {
     const blob = await (await fetch(uri)).blob();
-    const r = await fetch(base + '/transcribe', {
+    const path = language === 'hi' ? '/transcribe?lang=hi' : '/transcribe';
+    const r = await fetch(base + path, {
       method: 'POST',
       headers: { 'Content-Type': mimeType || blob.type || 'audio/m4a' },
       body: blob,
+      signal: controller.signal,
     });
     if (!r.ok) return '';
     const data = (await r.json()) as { text?: string };
     return (data.text ?? '').trim();
   } catch {
     return '';
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -133,4 +152,9 @@ export async function scoreCurveball(line: string, response: string): Promise<Cu
     note: String(result.note ?? ''),
     stronger: String(result.stronger ?? ''),
   };
+}
+
+export async function fetchHint(spec: RoundSpec, history: Turn[]): Promise<string> {
+  const result = await post<{ hint?: string }>('/hint', { ...spec, history }, 20000);
+  return String(result?.hint ?? '').trim();
 }
