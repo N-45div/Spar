@@ -54,13 +54,14 @@ function counterpartSystem(spec: RoundSpec): string {
     `Stakes for you: ${spec.stakes}.`,
     spec.title ? `Scenario: ${spec.title}.${spec.brief ? ' ' + spec.brief : ''}` : 'Scenario: the manager has asked to talk about a pattern in your work.',
     `Pressure level ${pressure}/5: you are ${PRESSURE_NOTES[pressure - 1]}.`,
-    spec.language === 'hi'
-      ? 'Speak in natural Hinglish - Hindi and English mixed the way people actually talk in Indian offices - written in Roman (Latin) script only, never Devanagari. Keep the same length and bite.'
-      : 'Speak in natural spoken English.',
+    'Speak in natural spoken English.',
     'The user is the manager. Stay fully in character. Speak like a real person in a real meeting: 1–3 short sentences, natural spoken English, contractions, no stage directions, no bullet points.',
     'Never break character, never mention being an AI, never coach the manager inside your line. React to what the manager actually said; if it was vague or empty, push on that.',
     'Respond ONLY with strict JSON: {"line": "<what you say out loud>"}.',
-  ].join('\n');
+    spec.language === 'hi'
+      ? 'LANGUAGE RULE, overrides everything above: the value of "line" MUST be Hinglish - Hindi and English mixed the way people actually talk in Indian offices - written in Roman (Latin) script only, never Devanagari and never plain English. Example of the register: "Sir, maine poori koshish ki thi, par timeline hi unrealistic tha."'
+      : '',
+  ].filter(Boolean).join('\n');
 }
 
 function coachSystem(): string {
@@ -73,7 +74,13 @@ function coachSystem(): string {
   ].join('\n');
 }
 
-async function sarvamChat(env: Env, messages: { role: string; content: string }[], temperature: number, model = 'sarvam-105b-conversations') {
+async function sarvamChat(
+  env: Env,
+  messages: { role: string; content: string }[],
+  temperature: number,
+  maxTokens = 1200,
+  model = 'sarvam-105b-conversations',
+) {
   const r = await fetch('https://api.sarvam.ai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -84,43 +91,72 @@ async function sarvamChat(env: Env, messages: { role: string; content: string }[
       model,
       messages,
       temperature,
-      max_tokens: 1200,
+      max_tokens: maxTokens,
       response_format: { type: 'json_object' },
     }),
   });
   if (!r.ok) throw new Error(`sarvam ${r.status}: ${(await r.text()).slice(0, 300)}`);
   const data = (await r.json()) as {
-    choices?: { message?: { content?: string | null; reasoning_content?: string | null } }[];
+    choices?: {
+      finish_reason?: string;
+      message?: { content?: string | null; reasoning_content?: string | null };
+    }[];
   };
-  const message = data.choices?.[0]?.message;
+  const choice = data.choices?.[0];
+  const message = choice?.message;
   // Thinking variants can exhaust the budget inside reasoning_content; fall back to it.
-  return message?.content || message?.reasoning_content || '';
+  return {
+    text: message?.content || message?.reasoning_content || '',
+    finish: choice?.finish_reason ?? '',
+  };
 }
 
 function extractJson<T>(text: string): T {
   const cleaned = text.replace(/<think>[\s\S]*?<\/think>/g, '');
   const start = cleaned.indexOf('{');
+  if (start < 0) throw new Error('no json in model output');
   const end = cleaned.lastIndexOf('}');
-  if (start < 0 || end < 0) throw new Error('no json in model output');
-  return JSON.parse(cleaned.slice(start, end + 1)) as T;
+  if (end > start) {
+    try {
+      return JSON.parse(cleaned.slice(start, end + 1)) as T;
+    } catch {
+      // fall through to the repair below
+    }
+  }
+  // Sarvam opens a round with `{ "<the line>"` — a bare string where the key
+  // belongs — and then, pinned to JSON grammar by response_format, pads
+  // whitespace until max_tokens and never closes the brace. Keep what it said.
+  const bare = /\{\s*("(?:[^"\\]|\\.)*")/.exec(cleaned.slice(start));
+  if (bare) return JSON.parse(`{"line": ${bare[1]}}`) as T;
+  throw new Error('no json in model output');
 }
 
 async function chatJson<T>(
   env: Env,
   messages: { role: string; content: string }[],
   temperature: number,
+  maxTokens = 1200,
+  attempts = 2,
 ): Promise<{ parsed: T | null; raw: string }> {
   let raw = '';
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const attemptMessages =
       attempt === 0
         ? messages
         : [...messages, { role: 'user', content: 'Output only the JSON object described above. No prose, no markdown.' }];
-    raw = await sarvamChat(env, attemptMessages, attempt === 0 ? temperature : 0.4);
+    const { text, finish } = await sarvamChat(
+      env,
+      attemptMessages,
+      attempt === 0 ? temperature : 0.4,
+      maxTokens,
+    );
+    raw = text;
     try {
       return { parsed: extractJson<T>(raw), raw };
     } catch {
-      // retry once with the stricter nudge
+      // A generation that hit the token ceiling will not come back shorter on a
+      // second ask — retrying only doubles the wait.
+      if (finish === 'length') break;
     }
   }
   return { parsed: null, raw };
@@ -135,13 +171,28 @@ function historyMessages(history: Turn[]) {
 
 async function reply(env: Env, spec: RoundSpec) {
   const messages = [{ role: 'system', content: counterpartSystem(spec) }, ...historyMessages(spec.history)];
-  if (spec.history.length === 0) {
-    messages.push({ role: 'user', content: '(The meeting starts. Open with your first line as the character.)' });
-  } else if (spec.history[spec.history.length - 1].who === 'them') {
+  // No trailing user turn on the opening line: with nothing from the assistant
+  // yet, Sarvam answers a user turn with a keyless `{ "…"` and then burns the
+  // whole token budget padding whitespace (~54s). System-only returns clean
+  // JSON in under two seconds.
+  if (spec.history.length > 0 && spec.history[spec.history.length - 1].who === 'them') {
     messages.push({ role: 'user', content: '(The manager says nothing. Fill the silence in character.)' });
   }
-  const { parsed, raw } = await chatJson<{ line?: string; hint?: string; advice_to_manager?: string }>(env, messages, 0.85);
-  if (parsed?.line) return { line: String(parsed.line).trim(), hint: String(parsed.advice_to_manager ?? parsed.hint ?? '').trim() };
+  const { parsed, raw } = await chatJson<{ line?: string; hint?: string; advice_to_manager?: string }>(
+    env,
+    messages,
+    0.85,
+    180,
+    // One attempt only: extractJson repairs the keyless shape and the raw-text
+    // fallback catches the rest, so a retry just doubles the wait on a slow turn.
+    1,
+  );
+  if (parsed?.line) {
+    return {
+      line: endOnSentence(String(parsed.line).trim()),
+      hint: String(parsed.advice_to_manager ?? parsed.hint ?? '').trim(),
+    };
+  }
   // Never let formatting kill a round: treat whatever was said as the line.
   const text = raw.split('<think>').map((part, i) => (i === 0 ? part : part.slice(part.indexOf('</think>') + 8))).join('').trim();
   if (text) {
@@ -189,6 +240,17 @@ THE MANAGER REPLIED: "${response}"` },
   const { parsed, raw } = await chatJson<Record<string, unknown>>(env, messages, 0.4);
   if (!parsed) throw new Error('no json in model output: ' + raw.slice(0, 120));
   return parsed;
+}
+
+// A spoken line that stops mid-word sounds broken. If the model ran into the
+// token ceiling, fall back to the last sentence that actually finished.
+function endOnSentence(line: string): string {
+  if (/[.!?…”"']\s*$/.test(line)) return line;
+  const lastStop = Math.max(line.lastIndexOf('. '), line.lastIndexOf('? '), line.lastIndexOf('! '));
+  if (lastStop > line.length * 0.4) return line.slice(0, lastStop + 1);
+  // One long unfinished sentence: cut at the last word so it does not end mid-word.
+  const lastSpace = line.lastIndexOf(' ');
+  return lastSpace > 0 ? line.slice(0, lastSpace).replace(/[,;:—-]$/, '') + '…' : line;
 }
 
 function trimToSentence(text: string, max: number): string {
