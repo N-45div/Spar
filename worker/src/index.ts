@@ -237,7 +237,7 @@ async function curveball(env: Env, body: { line?: string; response?: string }) {
     { role: 'user', content: `THE REPORT SAID: "${line}"
 THE MANAGER REPLIED: "${response}"` },
   ];
-  const { parsed, raw } = await chatJson<Record<string, unknown>>(env, messages, 0.4);
+  const { parsed, raw } = await chatJson<Record<string, unknown>>(env, messages, 0.4, 300);
   if (!parsed) throw new Error('no json in model output: ' + raw.slice(0, 120));
   return parsed;
 }
@@ -282,7 +282,7 @@ async function hint(env: Env, spec: RoundSpec) {
       content: `Scenario: ${spec.title ?? 'freestyle'} · counterpart: ${spec.temperament} ${spec.role} · pressure ${spec.pressure}/5` + String.fromCharCode(10) + `Recent exchange:` + String.fromCharCode(10) + recent + String.fromCharCode(10) + `The counterpart just said: "${lastThem}"` + String.fromCharCode(10) + `What is the manager's best move right now?`,
     },
   ];
-  const { parsed, raw } = await chatJson<{ hint?: string }>(env, messages, 0.5);
+  const { parsed, raw } = await chatJson<{ hint?: string }>(env, messages, 0.5, 120, 1);
   const text = String(parsed?.hint ?? '').trim();
   return { hint: text ? trimToSentence(text, 240) : '' };
 }
@@ -356,8 +356,8 @@ async function speakHinglish(env: Env, text: string) {
     body: JSON.stringify({
       text: text.slice(0, 1400),
       target_language_code: 'hi-IN',
-      speaker: 'anushka',
-      model: 'bulbul:v2',
+      speaker: 'shreya',
+      model: 'bulbul:v3',
     }),
   });
   if (!r.ok) throw new Error(`sarvam tts ${r.status}: ${(await r.text()).slice(0, 300)}`);
