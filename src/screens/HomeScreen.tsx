@@ -19,6 +19,7 @@ import {
 import { scoreCurveball } from '../round/engine';
 import { CurveballRecord, loadCurveball, saveCurveball } from '../store/curveball';
 import { bestScore, loadRounds, RoundRecord, trainingDays } from '../store/rounds';
+import { countdownLabel, loadUpcoming, Upcoming, whenLabel } from '../store/upcoming';
 import { colors, fonts, radius, type } from '../theme/tokens';
 import { contentColumn } from '../theme/layout';
 
@@ -38,6 +39,7 @@ function roundMeta(record: RoundRecord) {
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [rounds, setRounds] = useState<RoundRecord[]>([]);
+  const [upcoming, setUpcoming] = useState<Upcoming | null>(null);
 
   const today = dayKey();
   const curveball = curveballFor();
@@ -52,6 +54,9 @@ export function HomeScreen() {
       let active = true;
       loadRounds().then((all) => {
         if (active) setRounds(all);
+      });
+      loadUpcoming().then((value) => {
+        if (active) setUpcoming(value);
       });
       loadCurveball(today).then((saved) => {
         if (active) setResult(saved);
@@ -71,12 +76,51 @@ export function HomeScreen() {
   const days = trainingDays(rounds);
   const hasRounds = rounds.length > 0;
 
+  const heroTitle = upcoming
+    ? `${whenLabel(upcoming.at)} —\n${upcoming.title}.`
+    : hasRounds
+      ? 'Ready for the next\nhard conversation.'
+      : 'The first round\nis the hardest.';
+
+  let heroSubtitle: string;
+  if (upcoming) {
+    heroSubtitle = `${upcoming.temperament} ${upcoming.role.toLowerCase()} · from your countdown`;
+  } else if (hasRounds) {
+    heroSubtitle = `Last round: ${rounds[0].title} · scored ${rounds[0].overall}`;
+  } else {
+    heroSubtitle = 'Describe who is across the table and go three minutes.';
+  }
+
+  let cardBody: string;
+  if (upcoming) {
+    cardBody = 'Rehearse it now, while getting it wrong is free.';
+  } else if (hasRounds) {
+    cardBody = 'Three minutes of practice tonight keeps the streak alive.';
+  } else {
+    cardBody = 'Three minutes of practice tonight beats an hour of dread on Monday.';
+  }
+
   const startRehearsal = async () => {
     if (!(await canStartRound())) {
       navigation.navigate('Paywall');
       return;
     }
-    navigation.navigate('Persona');
+    navigation.navigate(
+      'Persona',
+      upcoming
+        ? {
+            scenario: {
+              id: 'upcoming',
+              title: upcoming.title,
+              brief: 'This one is real, and it is coming.',
+              role: upcoming.role,
+              temperament: upcoming.temperament,
+              stakes: upcoming.stakes,
+              pressure: 2,
+            },
+          }
+        : undefined,
+    );
   };
 
   const submitCurveball = async () => {
@@ -125,12 +169,10 @@ export function HomeScreen() {
         </View>
 
         <Text style={[type.display, { marginTop: 20 }]}>
-          {hasRounds ? 'Ready for the next\nhard conversation.' : 'The first round\nis the hardest.'}
+          {heroTitle}
         </Text>
         <Text style={[type.bodySmall, { fontSize: 13, marginTop: 8 }]}>
-          {hasRounds
-            ? `Last round: ${rounds[0].title} · scored ${rounds[0].overall}`
-            : 'Describe who is across the table and go three minutes.'}
+          {heroSubtitle}
         </Text>
 
         <Card style={{ marginTop: 16 }}>
@@ -144,7 +186,7 @@ export function HomeScreen() {
               }}
             >
               <Eyebrow color={colors.ember} size={9} style={{ letterSpacing: 1.26 }}>
-                TONIGHT
+                {upcoming ? countdownLabel(upcoming.at) : 'TONIGHT'}
               </Eyebrow>
             </View>
             <Text style={{ fontFamily: fonts.mono, fontSize: 10, color: colors.inkMeta }}>
@@ -152,15 +194,25 @@ export function HomeScreen() {
             </Text>
           </View>
           <Text style={[type.body, { marginTop: 11 }]}>
-            {hasRounds
-              ? 'Three minutes of practice tonight keeps the streak alive.'
-              : 'Three minutes of practice tonight beats an hour of dread on Monday.'}
+            {cardBody}
           </Text>
           <Button
             label="Rehearse tonight"
             style={{ marginTop: 13, height: 50 }}
             onPress={startRehearsal}
           />
+          <Pressable onPress={() => navigation.navigate('Upcoming', { existing: upcoming ?? undefined })}>
+            <Text
+              style={[
+                type.bodySmall,
+                { fontSize: 12, textAlign: 'center', marginTop: 12, color: colors.inkFaint },
+              ]}
+            >
+              {upcoming
+                ? 'Change the real conversation'
+                : 'Have a real one coming up? Count it down →'}
+            </Text>
+          </Pressable>
         </Card>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 20 }}>

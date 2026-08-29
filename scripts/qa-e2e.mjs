@@ -138,6 +138,34 @@ if (curveballInput) {
   await shot('01b-curveball-scored');
 }
 
+// 1c. The real conversation: set a countdown, Home reflects it, rehearsing opens that persona
+check('countdown entry point', await waitText('Count it down', 5000));
+check('tap countdown link', await clickText('Have a real one coming up? Count it down →'));
+check('upcoming screen renders', await waitText("What's coming", 15000));
+const upcomingInput = await page.$('textarea[placeholder^="The raise conversation"], input[placeholder^="The raise conversation"]');
+check('upcoming has a title field', !!upcomingInput);
+if (upcomingInput) {
+  await upcomingInput.type('The raise conversation with Priya');
+  check('pick when', await clickText('In three days'));
+  check('pick who', await clickText('Goes quiet'));
+  check('preview shows the plan', await waitText('The raise conversation with Priya —', 8000));
+  check('save countdown', await clickText('Count me down'));
+  check('back on home', await waitText('Rehearse tonight', 15000));
+  check('home shows the countdown', await waitText('IN 3 DAYS', 8000));
+  check('home hero names the conversation', await waitText('the raise conversation with priya', 5000));
+  check('home names the counterpart', await waitText('Goes quiet direct report', 5000));
+  await shot('01c-home-countdown');
+  check('rehearsing opens the real persona', await clickText('Rehearse tonight'));
+  check('persona is prefilled from the countdown', await waitText('THE RAISE CONVERSATION WITH PRIYA', 15000));
+  check('countdown brief shown', await waitText('This one is real', 5000));
+  await page.mouse.click(46, 30);
+  check('back on home after peeking', await waitText('Rehearse tonight', 10000));
+  check('countdown can be edited', await clickText('Change the real conversation'));
+  check('edit screen offers removal', await waitText('Remove this conversation', 10000));
+  check('remove the countdown', await clickText('Remove this conversation'));
+  check('home returns to its default card', await waitText('Count it down', 15000));
+}
+
 // 2. Freestyle persona
 check('tap rehearse', await clickText('Rehearse tonight'));
 check('persona renders', await waitText("Who's across", 30000));

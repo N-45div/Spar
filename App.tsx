@@ -25,6 +25,7 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { PaywallScreen } from './src/screens/PaywallScreen';
 import { PersonaScreen } from './src/screens/PersonaScreen';
 import { ProgressScreen } from './src/screens/ProgressScreen';
+import { UpcomingScreen } from './src/screens/UpcomingScreen';
 import { RoundScreen } from './src/screens/RoundScreen';
 import { ScorecardScreen } from './src/screens/ScorecardScreen';
 import { colors, fonts } from './src/theme/tokens';
@@ -124,6 +125,7 @@ export default function App() {
           <RootStack.Screen name="Round" component={RoundScreen} options={{ gestureEnabled: false }} />
           <RootStack.Screen name="Scorecard" component={ScorecardScreen} />
           <RootStack.Screen name="Paywall" component={PaywallScreen} />
+          <RootStack.Screen name="Upcoming" component={UpcomingScreen} />
         </RootStack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
