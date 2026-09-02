@@ -129,11 +129,16 @@ export function speakUrl(text: string, language = 'en'): string | null {
   return `${base}/speak?text=${encodeURIComponent(text)}${lang}`;
 }
 
-export async function transcribe(uri: string, mimeType?: string, language = 'en'): Promise<string> {
+/**
+ * Resolves to the transcript, an empty string when the audio genuinely held no
+ * speech, or null when transcription itself failed (offline, timeout, upstream
+ * error). Callers must not spend a turn on null.
+ */
+export async function transcribe(uri: string, mimeType?: string, language = 'en'): Promise<string | null> {
   const base = apiBase();
-  if (!base) return '';
+  if (!base) return null;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25000);
+  const timer = setTimeout(() => controller.abort(), 15000);
   try {
     const blob = await (await fetch(uri)).blob();
     const path = language === 'hi' ? '/transcribe?lang=hi' : '/transcribe';
@@ -143,11 +148,11 @@ export async function transcribe(uri: string, mimeType?: string, language = 'en'
       body: blob,
       signal: controller.signal,
     });
-    if (!r.ok) return '';
+    if (!r.ok) return null;
     const data = (await r.json()) as { text?: string };
     return (data.text ?? '').trim();
   } catch {
-    return '';
+    return null;
   } finally {
     clearTimeout(timer);
   }

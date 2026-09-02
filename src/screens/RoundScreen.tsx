@@ -73,6 +73,7 @@ export function RoundScreen({ navigation, route }: Props) {
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [lastSaid, setLastSaid] = useState('');
   const [micBlocked, setMicBlocked] = useState(false);
+  const [missed, setMissed] = useState(false);
   const [seconds, setSeconds] = useState(0);
 
   const history = useRef<Turn[]>([]);
@@ -83,6 +84,9 @@ export function RoundScreen({ navigation, route }: Props) {
   const pendingUtterance = useRef<string | null>(null);
   const hintTurn = useRef(0);
   const recordingStarted = useRef(false);
+  // Bumped on every press and release. A press that is still awaiting permission or
+  // prepareToRecordAsync when the finger lifts must not start recording afterwards.
+  const pressSeq = useRef(0);
   const playingRef = useRef(false);
   const voiceFallback = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -250,11 +254,25 @@ export function RoundScreen({ navigation, route }: Props) {
     });
   };
 
+  // Release the native recorder whatever state it is in, so a stuck or half-prepared
+  // recorder never survives into the next press (Android throws AlreadyPrepared otherwise).
+  const resetRecorder = async () => {
+    try {
+      await recorder.stop();
+    } catch {
+      // nothing to stop
+    }
+  };
+
   const onPressIn = async () => {
     if (phase !== 'ready') return;
+    const seq = ++pressSeq.current;
     stopSpeaking();
+    setMissed(false);
     setPhase('listening');
     recordingStarted.current = false;
+    // A typed utterance (dev/QA hook) needs no microphone at all.
+    if (pendingUtterance.current != null) return;
     if (!permission.current) {
       try {
         permission.current = (await requestRecordingPermissionsAsync()).granted;
@@ -262,6 +280,8 @@ export function RoundScreen({ navigation, route }: Props) {
         permission.current = false;
       }
     }
+    // The permission sheet cancels the touch; the release already happened.
+    if (pressSeq.current !== seq || !alive.current) return;
     if (!permission.current) {
       setMicBlocked(true);
       setPhase('ready');
@@ -270,39 +290,53 @@ export function RoundScreen({ navigation, route }: Props) {
     setMicBlocked(false);
     try {
       await recorder.prepareToRecordAsync();
+      if (pressSeq.current !== seq || !alive.current) {
+        // Released while preparing: never start a recording nobody is holding.
+        await resetRecorder();
+        return;
+      }
       recorder.record();
       recordingStarted.current = true;
     } catch {
       recordingStarted.current = false;
+      await resetRecorder();
     }
   };
 
   const onPressOut = async () => {
     if (phase !== 'listening') return;
+    pressSeq.current += 1;
     const typed = pendingUtterance.current;
     pendingUtterance.current = null;
     if (!recordingStarted.current && typed == null) {
       // Nothing was captured, so this is not a turn: do not spend an exchange or
       // ask the counterpart to answer silence.
+      await resetRecorder();
       setPhase('ready');
       return;
     }
     setPhase('transcribing');
-    let said = '';
+    let said: string | null = '';
     try {
       if (recorder.isRecording) await recorder.stop();
       // Only trust recorder.uri when this turn actually recorded — a stale uri from
       // a previous turn would otherwise be transcribed again.
       const uri = recordingStarted.current ? recorder.uri : null;
-      said = typed ?? (uri ? await transcribe(uri, undefined, language) : '');
+      said = typed ?? (uri ? await transcribe(uri, undefined, language) : null);
     } catch {
-      said = typed ?? '';
+      said = typed ?? null;
     }
+    recordingStarted.current = false;
     if (!alive.current) return;
-    if (said) {
-      history.current.push({ who: 'you', text: said });
-      setLastSaid(said);
+    if (!said) {
+      // Transcription failed or heard nothing. That is not a turn: keep the exchange,
+      // keep her last line on screen, and invite another go.
+      setMissed(true);
+      setPhase('ready');
+      return;
     }
+    history.current.push({ who: 'you', text: said });
+    setLastSaid(said);
     exchanges.current += 1;
     if (exchanges.current >= MAX_EXCHANGES) {
       endRound();
@@ -537,14 +571,16 @@ export function RoundScreen({ navigation, route }: Props) {
       <Eyebrow size={9} style={{ textAlign: 'center', marginTop: 9 }}>
         {pttStatus}
       </Eyebrow>
-      {micBlocked && (
+      {(micBlocked || missed) && (
         <Text
           style={[
             type.bodySmall,
             { fontSize: 11, textAlign: 'center', marginTop: 6, color: colors.ember },
           ]}
         >
-          Spar needs the microphone to hear your answer.
+          {micBlocked
+            ? 'Spar needs the microphone to hear your answer.'
+            : 'Didn’t catch that. Hold and try again — this one won’t count.'}
         </Text>
       )}
     </>
