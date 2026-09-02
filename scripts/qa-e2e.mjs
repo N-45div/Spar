@@ -152,7 +152,7 @@ if (upcomingInput) {
   check('save countdown', await clickText('Count me down'));
   check('back on home', await waitText('Rehearse tonight', 15000));
   check('home shows the countdown', await waitText('IN 3 DAYS', 8000));
-  check('home hero names the conversation', await waitText('the raise conversation with priya', 5000));
+  check('home hero names the conversation', await waitText('The raise conversation with Priya', 5000));
   check('home names the counterpart', await waitText('Goes quiet direct report', 5000));
   await shot('01c-home-countdown');
   check('rehearsing opens the real persona', await clickText('Rehearse tonight'));
@@ -179,9 +179,36 @@ check('begin round', await clickText('Begin round one'));
 check('round renders (coach)', await waitText('CORNER COACH', 30000));
 check('counterpart opening line arrives', await waitCaptionChange('“…”', 90000));
 check('round ready for your move', await waitText('Hold to respond', 60000));
+
+// A tap too quick to record, and a turn that heard nothing, must not spend an
+// exchange or make her answer silence.
+const captionNow = () =>
+  page.evaluate(() => {
+    const els = [...document.querySelectorAll('div')].filter(
+      (e) => e.children.length === 0 && e.textContent.trim().startsWith('“'),
+    );
+    return els.at(-1)?.textContent.trim() ?? '';
+  });
+const lineBeforeMiss = await captionNow();
+check('quick tap: press and release instantly', await holdRelease('Hold to respond', 20));
+check('quick tap: button comes back', await waitText('Hold to respond', 30000));
+await sleep(1500);
+check('quick tap: she did not answer silence', (await captionNow()) === lineBeforeMiss);
+await page.evaluate(() => globalThis.__sparSetUtterance?.(''));
+check('empty turn: hold and release with nothing said', await holdRelease('Hold to respond', 400));
+check('empty turn: told it will not count', await waitText('this one won’t count', 15000));
+check('empty turn: button comes back', await waitText('Hold to respond', 30000));
+await sleep(1200);
+check('empty turn: she did not answer', (await captionNow()) === lineBeforeMiss);
+
 check('pressure label default', await waitText('PUSHBACK', 5000));
 await shot('03-round');
 const opener = await caption();
+// A real turn needs real words. Before the empty-turn fix this step "passed" only
+// because she used to answer silence.
+await page.evaluate(() =>
+  globalThis.__sparSetUtterance?.("I hear that it's been a hard month. Three deadlines still slipped, and I need a plan by Friday."),
+);
 check('hold/release 1', await holdRelease('Hold to respond'));
 check('counterpart replies after your turn', await waitCaptionChange(opener, 90000));
 check('ready again after reply', await waitText('Hold to respond', 60000));
@@ -190,6 +217,9 @@ if (label) await page.mouse.click(334, label.y + label.height + 14);
 check('pressure label breaking point', await waitText('BREAKING POINT', 10000));
 await shot('04-round-p5');
 const beforeHot = await caption();
+await page.evaluate(() =>
+  globalThis.__sparSetUtterance?.("I'm not comparing you to anyone. One acknowledgment from you, then we fix the blocker together."),
+);
 check('hold/release at pressure 5', await holdRelease('Hold to respond'));
 check('counterpart replies at pressure 5', await waitCaptionChange(beforeHot, 90000));
 
