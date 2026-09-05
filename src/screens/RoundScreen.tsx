@@ -88,6 +88,9 @@ export function RoundScreen({ navigation, route }: Props) {
   // prepareToRecordAsync when the finger lifts must not start recording afterwards.
   const pressSeq = useRef(0);
   const playingRef = useRef(false);
+  // True once the remote audio has actually advanced. `playing` alone is not proof:
+  // Android reports playing while still buffering and web sets it synchronously.
+  const progressedRef = useRef(false);
   const voiceFallback = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
@@ -102,11 +105,14 @@ export function RoundScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     playingRef.current = playerStatus.playing;
-    if (playerStatus.playing && voiceFallback.current) {
-      clearTimeout(voiceFallback.current);
-      voiceFallback.current = null;
+    if (playerStatus.currentTime > 0) {
+      progressedRef.current = true;
+      if (voiceFallback.current) {
+        clearTimeout(voiceFallback.current);
+        voiceFallback.current = null;
+      }
     }
-  }, [playerStatus.playing]);
+  }, [playerStatus.playing, playerStatus.currentTime]);
 
   useEffect(() => {
     const timer = setInterval(() => setSeconds((value) => value + 1), 1000);
@@ -147,15 +153,22 @@ export function RoundScreen({ navigation, route }: Props) {
     const url = speakUrl(text, language);
     if (url) {
       try {
+        progressedRef.current = false;
         player.replace({ uri: url });
         player.play();
         // play() returns before the audio has loaded, so a failed fetch is silent.
-        // If nothing is playing shortly after, say the line with the system voice
-        // rather than letting the round continue as if she had spoken.
+        // If the audio has not advanced by now, say the line with the system voice
+        // and drop the remote one so a late arrival cannot speak over it.
         voiceFallback.current = setTimeout(() => {
           voiceFallback.current = null;
-          if (alive.current && !playingRef.current) speakWithSystemVoice(text);
-        }, 2500);
+          if (!alive.current || progressedRef.current) return;
+          try {
+            player.pause();
+          } catch {
+            // nothing loaded
+          }
+          speakWithSystemVoice(text);
+        }, 4000);
         return;
       } catch {
         // fall through to system voice
