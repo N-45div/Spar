@@ -3,7 +3,9 @@
 // degrades so gracefully that a dead endpoint is invisible from the UI — run this
 // before recording anything or shipping a build.
 // Usage: node scripts/smoke-api.mjs [apiBase]
+import fs from 'node:fs';
 const API = (process.argv[2] || 'https://spar-api.spar-api.workers.dev').replace(/\/$/, '');
+const APP_KEY = JSON.parse(fs.readFileSync(new URL('../app.json', import.meta.url), 'utf8')).expo.extra.apiKey;
 
 const results = [];
 function record(name, ok, detail) {
@@ -23,7 +25,7 @@ async function postJson(path, body, timeoutMs = 120000) {
   try {
     const r = await fetch(API + path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Spar-Key': APP_KEY },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -38,6 +40,12 @@ async function postJson(path, body, timeoutMs = 120000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// the gate: no key, no service
+{
+  const r = await fetch(API + '/reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  record('gate refuses a call without the app key', r.status === 401, 'status=' + r.status);
 }
 
 // health
@@ -150,7 +158,7 @@ for (const [name, qs, expectType] of [
   ['speak (hinglish)', 'lang=hi&text=Sir%2C%20maine%20poori%20koshish%20ki%20thi.', 'audio/wav'],
 ]) {
   const { value, ms } = await timed(async () => {
-    const r = await fetch(`${API}/speak?${qs}`);
+    const r = await fetch(`${API}/speak?${qs}&k=${encodeURIComponent(APP_KEY)}`);
     const buf = await r.arrayBuffer();
     return { status: r.status, type: r.headers.get('content-type') || '', bytes: buf.byteLength };
   });

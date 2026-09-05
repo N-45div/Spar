@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import ffmpegPath from 'ffmpeg-static';
 import puppeteer from 'puppeteer-core';
+const APP_KEY = JSON.parse(fs.readFileSync(new URL('../app.json', import.meta.url), 'utf8')).expo.extra.apiKey;
 
 const [, , chromePath, outDir, apiBaseArg] = process.argv;
 const apiBase = (apiBaseArg || 'https://spar-api.spar-api.workers.dev').replace(/\/$/, '');
@@ -126,7 +127,7 @@ try {
 
 const audio = [];
 for (let i = 0; i < spoken.length; i++) {
-  const res = await fetch(`${apiBase}/speak?lang=hi&text=${encodeURIComponent(spoken[i].text)}`);
+  const res = await fetch(`${apiBase}/speak?lang=hi&text=${encodeURIComponent(spoken[i].text)}&k=${encodeURIComponent(APP_KEY)}`);
   if (!res.ok) continue;
   const file = `${outDir}/hi-line-${i}.wav`;
   fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));

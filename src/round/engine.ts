@@ -35,6 +35,14 @@ export type ScoreResult = {
 };
 
 const DEFAULT_API_BASE = 'https://spar-api.spar-api.workers.dev';
+// Shared app token; the Worker refuses calls without it. Web preview has no
+// expoConfig.extra, so the default mirrors app.json.
+const DEFAULT_APP_KEY = 'spar_64d2aac71a0484fd2b378f6c3b80e08fe8a6988dfd8f17bb';
+
+export function apiKey(): string {
+  const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
+  return typeof extra.apiKey === 'string' && extra.apiKey.length > 0 ? extra.apiKey : DEFAULT_APP_KEY;
+}
 
 export function apiBase(): string | null {
   const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
@@ -52,7 +60,7 @@ async function post<T>(path: string, body: unknown, timeoutMs = 20000): Promise<
   try {
     const r = await fetch(base + path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Spar-Key': apiKey() },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -126,7 +134,7 @@ export function speakUrl(text: string, language = 'en'): string | null {
   const base = apiBase();
   if (!base) return null;
   const lang = language === 'hi' ? '&lang=hi' : '';
-  return `${base}/speak?text=${encodeURIComponent(text)}${lang}`;
+  return `${base}/speak?text=${encodeURIComponent(text)}${lang}&k=${encodeURIComponent(apiKey())}`;
 }
 
 /**
@@ -144,7 +152,7 @@ export async function transcribe(uri: string, mimeType?: string, language = 'en'
     const path = language === 'hi' ? '/transcribe?lang=hi' : '/transcribe';
     const r = await fetch(base + path, {
       method: 'POST',
-      headers: { 'Content-Type': mimeType || blob.type || 'audio/m4a' },
+      headers: { 'Content-Type': mimeType || blob.type || 'audio/m4a', 'X-Spar-Key': apiKey() },
       body: blob,
       signal: controller.signal,
     });

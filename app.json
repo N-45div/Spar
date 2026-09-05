@@ -47,7 +47,8 @@
       "apiBaseUrl": "https://spar-api.spar-api.workers.dev",
       "eas": {
         "projectId": "d49b0ac2-4155-4259-9bcd-2826dff09a75"
-      }
+      },
+      "apiKey": "spar_64d2aac71a0484fd2b378f6c3b80e08fe8a6988dfd8f17bb"
     },
     "owner": "divshipatons-team",
     "splash": {
