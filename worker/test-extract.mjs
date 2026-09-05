@@ -3,11 +3,12 @@
 import fs from 'node:fs';
 
 const src = fs.readFileSync('src/index.ts', 'utf8');
-const start = src.indexOf('function extractJson');
-const end = src.indexOf('\n}', start) + 2;
+const start = src.indexOf('function stripThinking');
+const end = src.indexOf('\n}', src.indexOf('function extractJson')) + 2;
 const body = src
   .slice(start, end)
   .replace('function extractJson<T>(text: string): T {', 'function extractJson(text) {')
+  .replace('function stripThinking(text: string): string {', 'function stripThinking(text) {')
   .replace(/ as T/g, '')
   .replace(/<T>/g, '');
 const extractJson = new Function(`${body}; return extractJson;`)();
@@ -24,9 +25,9 @@ const cases = [
     expect: (r) => r.line === 'What do you mean I have missed deadlines? The team is swamped.',
   },
   {
-    name: 'truncated valid object does NOT return the key as the line',
+    name: 'truncated valid object recovers the value, never the key',
     input: '{"line": "Well, the payments ticket was not even my fault, that was blocked by QA and',
-    expect: 'throws',
+    expect: (r) => r.line.startsWith('Well, the payments ticket') && r.line !== 'line',
   },
   {
     name: 'truncated coach JSON does NOT return "overall" as a line',
@@ -34,14 +35,19 @@ const cases = [
     expect: 'throws',
   },
   {
-    name: 'spaced key is still recognised as a key',
+    name: 'spaced key recovers its value',
     input: '{ "line" : "half a sentence',
-    expect: 'throws',
+    expect: (r) => r.line === 'half a sentence',
   },
   {
     name: 'keyless with escaped quotes survives',
     input: '{\n"She said \\"fine\\" and walked out."\n  ',
     expect: (r) => r.line === 'She said "fine" and walked out.',
+  },
+  {
+    name: 'unclosed think block never becomes a line',
+    input: '<think>the manager seems upset so I should',
+    expect: 'throws',
   },
   {
     name: 'think-tags are stripped before parsing',
