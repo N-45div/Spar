@@ -8,7 +8,8 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#171310",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ndivij.spar"
     },
     "android": {
       "package": "com.ndivij.spar",
@@ -32,6 +33,17 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "development",
+          "disableLocation": true,
+          "smallIcons": [
+            "./assets/android-icon-monochrome.png"
+          ],
+          "smallIconAccentColor": "#E4572E"
+        }
+      ],
       "expo-font",
       "expo-audio",
       [
@@ -48,7 +60,8 @@
       "eas": {
         "projectId": "d49b0ac2-4155-4259-9bcd-2826dff09a75"
       },
-      "apiKey": "spar_64d2aac71a0484fd2b378f6c3b80e08fe8a6988dfd8f17bb"
+      "apiKey": "spar_64d2aac71a0484fd2b378f6c3b80e08fe8a6988dfd8f17bb",
+      "oneSignalAppId": "7bd995e2-e253-4640-979a-a19c838725f7"
     },
     "owner": "divshipatons-team",
     "splash": {

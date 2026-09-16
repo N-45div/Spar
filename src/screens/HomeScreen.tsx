@@ -20,6 +20,7 @@ import { scoreCurveball } from '../round/engine';
 import { CurveballRecord, loadCurveball, saveCurveball } from '../store/curveball';
 import { bestScore, loadRounds, RoundRecord, trainingDays } from '../store/rounds';
 import { countdownLabel, loadUpcoming, Upcoming, whenLabel } from '../store/upcoming';
+import { syncProfileTags } from '../notifications/tags';
 import { colors, fonts, radius, type } from '../theme/tokens';
 import { contentColumn } from '../theme/layout';
 
@@ -58,6 +59,7 @@ export function HomeScreen() {
       loadUpcoming().then((value) => {
         if (active) setUpcoming(value);
       });
+      syncProfileTags();
       loadCurveball(today).then((saved) => {
         if (active) setResult(saved);
       });

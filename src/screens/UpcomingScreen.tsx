@@ -10,6 +10,8 @@ import { IconButton } from '../components/IconButton';
 import { Screen } from '../components/Screen';
 import { RootStackParamList } from '../navigation/types';
 import { cancelCountdown, scheduleCountdown } from '../notifications/countdown';
+import { requestPushPermission } from '../notifications/onesignal';
+import { syncProfileTags } from '../notifications/tags';
 import { clearUpcoming, saveUpcoming, whenLabel } from '../store/upcoming';
 import { contentColumn } from '../theme/layout';
 import { colors, fonts, radius, type } from '../theme/tokens';
@@ -57,7 +59,10 @@ export function UpcomingScreen({ navigation, route }: Props) {
       stakes: 'High',
     };
     await saveUpcoming(upcoming);
+    // Local reminders keep working offline; OneSignal drives the richer run-up.
     await scheduleCountdown(upcoming);
+    await requestPushPermission();
+    await syncProfileTags();
     setBusy(false);
     navigation.goBack();
   };
@@ -66,6 +71,7 @@ export function UpcomingScreen({ navigation, route }: Props) {
     setBusy(true);
     await clearUpcoming();
     await cancelCountdown();
+    await syncProfileTags();
     setBusy(false);
     navigation.goBack();
   };

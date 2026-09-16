@@ -11,6 +11,7 @@ import { canStartRound } from '../monetization/gate';
 import { RootStackParamList } from '../navigation/types';
 import { apiBase, scoreRound, ScoreResult } from '../round/engine';
 import { appendRound } from '../store/rounds';
+import { tagRoundFinished } from '../notifications/tags';
 import { colors, fonts, radius, type } from '../theme/tokens';
 import { contentColumn } from '../theme/layout';
 
@@ -100,6 +101,9 @@ export function ScorecardScreen({ navigation, route }: Props) {
       const c = scored?.clarity ?? fallback.clarity;
       const e = scored?.empathy ?? fallback.empathy;
       const b = scored?.boundaries ?? fallback.boundaries;
+      const overall = scored?.overall ?? Math.round((c + e + b) / 3);
+      // Segments update the moment the round lands, so a campaign can react tonight.
+      tagRoundFinished(overall, pressure, scenarioTitle);
       appendRound({
         id: Date.now().toString(36),
         at: new Date().toISOString(),
@@ -108,7 +112,7 @@ export function ScorecardScreen({ navigation, route }: Props) {
         temperament,
         stakes,
         pressure,
-        overall: scored?.overall ?? Math.round((c + e + b) / 3),
+        overall,
         clarity: c,
         empathy: e,
         boundaries: b,

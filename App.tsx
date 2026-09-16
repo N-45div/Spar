@@ -19,6 +19,8 @@ import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { CornerIcon, GymIcon, ProgressIcon } from './src/components/icons';
 import { configurePurchases } from './src/monetization/purchases';
+import { initOneSignal } from './src/notifications/onesignal';
+import { flushPendingNavigation, navigationRef, runWhenReady } from './src/navigation/ref';
 import { RootStackParamList } from './src/navigation/types';
 import { GymScreen } from './src/screens/GymScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -96,6 +98,14 @@ function Tabs() {
 export default function App() {
   useEffect(() => {
     configurePurchases();
+    // A tapped notification opens the screen it is about, even from cold start.
+    initOneSignal((target) => {
+      runWhenReady(() => {
+        if (target.screen === 'countdown') navigationRef.navigate('Upcoming', {});
+        else if (target.screen === 'rehearse') navigationRef.navigate('Persona');
+        else navigationRef.navigate('Tabs');
+      });
+    });
   }, []);
 
   const [fontsLoaded] = useFonts({
@@ -116,7 +126,11 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <NavigationContainer theme={navTheme}>
+      <NavigationContainer
+        ref={navigationRef}
+        theme={navTheme}
+        onReady={flushPendingNavigation}
+      >
         <RootStack.Navigator
           screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}
         >
